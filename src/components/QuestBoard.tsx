@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { QUESTS } from '../data/quests';
-import type { Quest, Priority } from '../data/quests';
+import type { Priority } from '../data/quests';
 import { QuestCard } from './QuestCard';
 
 type FilterPriority = 'all' | Priority;

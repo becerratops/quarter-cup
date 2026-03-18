@@ -165,3 +165,45 @@ const tdStyle: React.CSSProperties = {
   borderBottom: '1px solid #222',
   color: 'var(--text-primary)',
 };
+
+function Step({ number, title, description, color }: {
+  number: number;
+  title: string;
+  description: string;
+  color: string;
+}) {
+  return (
+    <div className="pixel-card" style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+      <div style={{
+        fontFamily: 'var(--font-pixel)',
+        fontSize: 20,
+        color,
+        textShadow: `0 0 12px ${color}40`,
+        minWidth: 36,
+        textAlign: 'center',
+      }}>
+        {number}
+      </div>
+      <div>
+        <div style={{
+          fontFamily: 'var(--font-pixel)',
+          fontSize: 10,
+          color,
+          marginBottom: 6,
+          textTransform: 'uppercase',
+          letterSpacing: 1,
+        }}>
+          {title}
+        </div>
+        <p style={{
+          fontFamily: 'var(--font-terminal)',
+          fontSize: 18,
+          color: 'var(--text-primary)',
+          lineHeight: 1.4,
+        }}>
+          {description}
+        </p>
+      </div>
+    </div>
+  );
+}

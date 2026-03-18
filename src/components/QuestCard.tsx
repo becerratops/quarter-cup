@@ -128,7 +128,6 @@ export function QuestCard({ quest, index }: { quest: Quest; index: number }) {
               opacity: 0.6,
               padding: '1px 6px',
               border: '1px solid var(--neon-blue)',
-              borderOpacity: 0.3,
             }}
           >
             {tag}
