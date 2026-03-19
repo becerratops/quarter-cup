@@ -65,13 +65,16 @@ if (!JIRA_BASE_URL || !JIRA_EMAIL || !JIRA_API_TOKEN) {
 const jiraAuth = Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString('base64');
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function jiraFetch(endpoint: string): Promise<any> {
+async function jiraFetch(endpoint: string, options?: { method?: string; body?: unknown }): Promise<any> {
   const url = `${JIRA_BASE_URL}${endpoint}`;
   const res = await fetch(url, {
+    method: options?.method || 'GET',
     headers: {
       Authorization: `Basic ${jiraAuth}`,
       Accept: 'application/json',
+      ...(options?.body ? { 'Content-Type': 'application/json' } : {}),
     },
+    ...(options?.body ? { body: JSON.stringify(options.body) } : {}),
   });
   if (!res.ok) {
     const body = await res.text();
@@ -190,26 +193,38 @@ interface JiraIssue {
     issuetype: { name: string };
     priority: { name: string } | null;
     resolutiondate: string | null;
+    created: string;
+    updated: string;
   };
 }
 
 async function fetchAllIssues(): Promise<JiraIssue[]> {
   const allIssues: JiraIssue[] = [];
-  let startAt = 0;
   const maxResults = 100;
+  let nextPageToken: string | undefined;
 
   while (true) {
-    const jql = encodeURIComponent(`project=${config.projectKey} ORDER BY key ASC`);
-    const fields = 'summary,description,status,assignee,reporter,labels,issuetype,priority,resolutiondate';
-    const data = await jiraFetch(
-      `/rest/api/3/search?jql=${jql}&maxResults=${maxResults}&startAt=${startAt}&fields=${fields}`
-    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body: any = {
+      jql: `project=${config.projectKey} ORDER BY key ASC`,
+      fields: ['summary', 'description', 'status', 'assignee', 'reporter', 'labels', 'issuetype', 'priority', 'resolutiondate', 'created', 'updated'],
+      maxResults,
+    };
+    if (nextPageToken) {
+      body.nextPageToken = nextPageToken;
+    }
+
+    const data = await jiraFetch('/rest/api/3/search/jql', {
+      method: 'POST',
+      body,
+    });
 
     allIssues.push(...data.issues);
-    console.log(`  Fetched ${allIssues.length} / ${data.total} issues`);
+    const total = data.total ?? '?';
+    console.log(`  Fetched ${allIssues.length} / ${total} issues`);
 
-    if (startAt + maxResults >= data.total) break;
-    startAt += maxResults;
+    if (!data.nextPageToken) break;
+    nextPageToken = data.nextPageToken;
   }
 
   return allIssues;
@@ -229,6 +244,12 @@ interface QuestData {
   acceptanceCriteria: string[];
   tags: string[];
   jiraUrl: string;
+  createdAt: string;
+  updatedAt: string;
+  jiraStatus: string;
+  issueType: string;
+  reporterName: string | null;
+  assigneeName: string | null;
   // Internal fields (not written to output)
   _reporterGithub: string | null;
   _completedByGithub: string | null;
@@ -285,6 +306,12 @@ function mapIssueToQuest(issue: JiraIssue): QuestData {
     acceptanceCriteria: [],
     tags,
     jiraUrl: `${JIRA_BASE_URL}/browse/${issue.key}`,
+    createdAt: issue.fields.created,
+    updatedAt: issue.fields.updated,
+    jiraStatus: jiraStatus,
+    issueType: issue.fields.issuetype?.name || 'Task',
+    reporterName: reporterName,
+    assigneeName: assigneeName,
     _reporterGithub: reporterPlayer?.githubUsername || null,
     _completedByGithub: status === 'completed' && assigneePlayer ? assigneePlayer.githubUsername : null,
     _issueType: issue.fields.issuetype?.name || 'Task',
@@ -378,6 +405,171 @@ function buildPlayerData(quests: QuestData[]): PlayerData[] {
   return Array.from(playerMap.values()).sort((a, b) => b.totalPoints - a.totalPoints);
 }
 
+// ---- GitHub PR Scanning ----
+
+interface PRContribution {
+  repo: string;
+  prNumber: number;
+  title: string;
+  url: string;
+  linkedQuest: string | null;
+  points: number;
+  type: 'merge' | 'review';
+}
+
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function githubFetch(endpoint: string): Promise<any> {
+  if (!GITHUB_TOKEN) throw new Error('GITHUB_TOKEN not set');
+  const url = endpoint.startsWith('http') ? endpoint : `https://api.github.com${endpoint}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${GITHUB_TOKEN}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`GitHub API ${res.status}: ${body}`);
+  }
+  return res.json();
+}
+
+function extractQuestIds(text: string): string[] {
+  const pattern = new RegExp(`${config.projectKey}-\\d+`, 'gi');
+  const matches = text.match(pattern) || [];
+  return [...new Set(matches.map(m => m.toUpperCase()))];
+}
+
+function findPlayerByGithub(username: string): PlayerConfig | undefined {
+  return config.players.find(
+    p => p.githubUsername.toLowerCase() === username.toLowerCase()
+  );
+}
+
+async function scanPRs(quests: QuestData[], players: PlayerData[]): Promise<void> {
+  if (!GITHUB_TOKEN || !config.github) {
+    console.log('\nSkipping PR scan (no GITHUB_TOKEN or github config)');
+    return;
+  }
+
+  const { org, repos } = config.github;
+  const reviewFraction = config.github.reviewPointsFraction ?? 0.25;
+  const unlinkedPrPoints = config.github.unlinkedPrPoints ?? 6;
+
+  console.log(`\nScanning PRs across ${repos.length} repos...`);
+
+  const playerMap = new Map(players.map(p => [p.githubUsername.toLowerCase(), p]));
+  const questMap = new Map(quests.map(q => [q.id, q]));
+  const firstPrSeen = new Set<string>();
+  const allContributions: PRContribution[] = [];
+
+  for (const repo of repos) {
+    try {
+      // Fetch recent merged PRs (last 100)
+      const prs = await githubFetch(
+        `/repos/${org}/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100`
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mergedPrs = prs.filter((pr: any) => pr.merged_at);
+      console.log(`  ${repo}: ${mergedPrs.length} merged PRs`);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const pr of mergedPrs) {
+        const authorLogin: string = pr.user?.login || '';
+        const authorPlayer = findPlayerByGithub(authorLogin);
+        const prTitle: string = pr.title || '';
+        const prBody: string = pr.body || '';
+        const prBranch: string = pr.head?.ref || '';
+
+        // Extract linked quest IDs from title, body, branch
+        const linkedIds = extractQuestIds(`${prTitle} ${prBody} ${prBranch}`);
+
+        // Author gets contribution credit for unlinked PRs
+        if (linkedIds.length === 0 && authorPlayer) {
+          const player = playerMap.get(authorPlayer.githubUsername.toLowerCase());
+          if (player) {
+            player.completionPoints += unlinkedPrPoints;
+            player.totalPoints += unlinkedPrPoints;
+            allContributions.push({
+              repo, prNumber: pr.number, title: prTitle, url: pr.html_url,
+              linkedQuest: null, points: unlinkedPrPoints, type: 'merge',
+            });
+          }
+        }
+
+        // First PR merged bonus
+        if (authorPlayer && !firstPrSeen.has(authorPlayer.githubUsername.toLowerCase())) {
+          firstPrSeen.add(authorPlayer.githubUsername.toLowerCase());
+          const player = playerMap.get(authorPlayer.githubUsername.toLowerCase());
+          if (player && config.bonuses.firstPrMerged > 0) {
+            player.completionPoints += config.bonuses.firstPrMerged;
+            player.totalPoints += config.bonuses.firstPrMerged;
+          }
+        }
+
+        // Fetch reviewers for this PR
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const reviews: any[] = await githubFetch(
+            `/repos/${org}/${repo}/pulls/${pr.number}/reviews`
+          );
+
+          // Get unique approving/commenting reviewers (not the author)
+          const reviewerLogins = [...new Set(
+            reviews
+              .filter(r => r.user?.login?.toLowerCase() !== authorLogin.toLowerCase())
+              .filter(r => ['APPROVED', 'COMMENTED', 'CHANGES_REQUESTED'].includes(r.state))
+              .map(r => r.user?.login as string)
+          )];
+
+          for (const reviewerLogin of reviewerLogins) {
+            const reviewerPlayer = findPlayerByGithub(reviewerLogin);
+            if (!reviewerPlayer) continue;
+            const player = playerMap.get(reviewerPlayer.githubUsername.toLowerCase());
+            if (!player) continue;
+
+            // Calculate review points based on linked quests
+            let reviewPts = 0;
+            if (linkedIds.length > 0) {
+              for (const qid of linkedIds) {
+                const quest = questMap.get(qid);
+                if (quest) {
+                  reviewPts += Math.round(quest.points * reviewFraction);
+                }
+              }
+            } else {
+              // Unlinked PR: fraction of the unlinked PR points
+              reviewPts = Math.round(unlinkedPrPoints * reviewFraction);
+            }
+
+            if (reviewPts > 0) {
+              player.reviewPoints += reviewPts;
+              player.totalPoints += reviewPts;
+              allContributions.push({
+                repo, prNumber: pr.number, title: prTitle, url: pr.html_url,
+                linkedQuest: linkedIds[0] || null, points: reviewPts, type: 'review',
+              });
+            }
+          }
+        } catch {
+          // Reviews API might fail for some PRs, skip silently
+        }
+      }
+    } catch (err) {
+      console.log(`  ${repo}: Error scanning — ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  // Re-sort players after PR points
+  players.sort((a, b) => b.totalPoints - a.totalPoints);
+
+  console.log(`  PR contributions found: ${allContributions.length}`);
+}
+
 async function sync() {
   console.log(`\nQuarter Cup Sync`);
   console.log(`================`);
@@ -438,6 +630,10 @@ async function sync() {
   console.log('\nCalculating player scores...');
   const players = buildPlayerData(quests);
 
+  // Scan GitHub PRs for review points + unlinked contributions
+  await scanPRs(quests, players);
+
+  console.log('\nFinal scores:');
   for (const p of players) {
     if (p.totalPoints > 0) {
       console.log(`  ${p.name}: ${p.totalPoints} pts (${p.discoveryPoints} discovery + ${p.completionPoints} completion + ${p.reviewPoints} review)`);
@@ -464,6 +660,12 @@ async function sync() {
       acceptanceCriteria: q.acceptanceCriteria,
       tags: q.tags,
       jiraUrl: q.jiraUrl,
+      createdAt: q.createdAt,
+      updatedAt: q.updatedAt,
+      jiraStatus: q.jiraStatus,
+      issueType: q.issueType,
+      reporterName: q.reporterName,
+      assigneeName: q.assigneeName,
     })),
     syncedAt,
   };

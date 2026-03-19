@@ -4,8 +4,9 @@
 // Copy this file to config.ts and customize for your team.
 // config.ts is gitignored — it stays private to your instance.
 //
-// Jira credentials are always via env vars (never in config):
+// Credentials are always via env vars (never in config):
 //   JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN
+//   GITHUB_TOKEN (optional — needed for PR scanning)
 // ============================================================
 
 export interface PlayerConfig {
@@ -46,6 +47,18 @@ export interface Config {
     firstPrMerged: number;
     /** Bonus for fixing a bug reported by someone else */
     fixingSomeoneElsesBug: number;
+  };
+
+  /** GitHub configuration for PR scanning (optional) */
+  github?: {
+    /** GitHub org or user that owns the repos */
+    org: string;
+    /** List of repo names to scan for merged PRs */
+    repos: string[];
+    /** Points awarded for a merged PR that doesn't link to an issue (default: 6) */
+    unlinkedPrPoints?: number;
+    /** Fraction of quest points awarded to PR reviewer (default: 0.25) */
+    reviewPointsFraction?: number;
   };
 }
 
@@ -95,5 +108,12 @@ export const CONFIG: Config = {
   bonuses: {
     firstPrMerged: 10,
     fixingSomeoneElsesBug: 3,
+  },
+
+  github: {
+    org: 'my-org',
+    repos: ['frontend', 'backend'],
+    unlinkedPrPoints: 6,
+    reviewPointsFraction: 0.25,
   },
 };

@@ -18,6 +18,12 @@ export interface Quest {
   acceptanceCriteria: string[];
   tags: string[];
   jiraUrl?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  jiraStatus?: string;
+  issueType?: string;
+  reporterName?: string | null;
+  assigneeName?: string | null;
 }
 
 const PRIORITY_MULTIPLIER: Record<Priority, number> = {
