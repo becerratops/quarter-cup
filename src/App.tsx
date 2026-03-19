@@ -57,7 +57,7 @@ function App() {
             color: 'var(--text-secondary)',
             letterSpacing: 1,
           }}>
-            QUARTER CUP v1.0
+            QUARTER CUP v1.1
           </div>
           <div style={{
             fontFamily: 'var(--font-terminal)',

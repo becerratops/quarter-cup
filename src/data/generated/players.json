@@ -1,0 +1,67 @@
+{
+  "players": [
+    {
+      "id": "p-1",
+      "name": "Alex",
+      "githubUsername": "alex-dev",
+      "avatar": "",
+      "role": "Lead Engineer",
+      "totalPoints": 0,
+      "discoveryPoints": 0,
+      "completionPoints": 0,
+      "reviewPoints": 0,
+      "questsCompleted": [],
+      "questsClaimed": [],
+      "questsDiscovered": []
+    },
+    {
+      "id": "p-2",
+      "name": "Jordan",
+      "githubUsername": "jordan-codes",
+      "avatar": "",
+      "role": "Full Stack Engineer",
+      "totalPoints": 0,
+      "discoveryPoints": 0,
+      "completionPoints": 0,
+      "reviewPoints": 0,
+      "questsCompleted": [],
+      "questsClaimed": [],
+      "questsDiscovered": []
+    },
+    {
+      "id": "p-3",
+      "name": "Sam",
+      "githubUsername": "sam-ships",
+      "avatar": "",
+      "role": "Frontend Engineer",
+      "totalPoints": 0,
+      "discoveryPoints": 0,
+      "completionPoints": 0,
+      "reviewPoints": 0,
+      "questsCompleted": [],
+      "questsClaimed": [],
+      "questsDiscovered": []
+    },
+    {
+      "id": "p-4",
+      "name": "Riley",
+      "githubUsername": "riley-ops",
+      "avatar": "",
+      "role": "DevOps Engineer",
+      "totalPoints": 0,
+      "discoveryPoints": 0,
+      "completionPoints": 0,
+      "reviewPoints": 0,
+      "questsCompleted": [],
+      "questsClaimed": [],
+      "questsDiscovered": []
+    }
+  ],
+  "season": {
+    "name": "Launch Sprint — Q1 2026",
+    "startDate": "2026-03-18",
+    "endDate": "2026-03-30",
+    "isActive": true
+  },
+  "syncedAt": null
+}

@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Quarter Cup instance config (team-specific, not open source)
+scripts/config.ts
+
+# Environment
+.env
+.env.local

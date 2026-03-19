@@ -25,29 +25,14 @@ jobs:
           echo "PR Branch: $PR_BRANCH"
           echo "PR Author: $PR_AUTHOR"
 
-          # Extract quest IDs (Q-001, Q-002, etc.) from title, body, and branch
-          QUEST_IDS=$(echo "$PR_TITLE $PR_BODY $PR_BRANCH" | grep -oiE 'Q-[0-9]+' | sort -u | tr '\n' ',' | sed 's/,$//')
+          # Extract quest IDs from title, body, and branch
+          # Supports both Q-### (open source demo) and PROJECTKEY-### (Jira) patterns
+          QUEST_IDS=$(echo "$PR_TITLE $PR_BODY $PR_BRANCH" | grep -oiE '(Q-[0-9]+|[A-Z]+-[0-9]+)' | sort -u | tr '\n' ',' | sed 's/,$//')
 
           echo "Found quest references: $QUEST_IDS"
           echo "quest_ids=$QUEST_IDS" >> $GITHUB_OUTPUT
           echo "author=$PR_AUTHOR" >> $GITHUB_OUTPUT
           echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
-
-      - name: Log quest completion
-        if: steps.quests.outputs.quest_ids != ''
-        run: |
-          echo "🏆 Quest completion detected!"
-          echo "Quests: ${{ steps.quests.outputs.quest_ids }}"
-          echo "Completed by: ${{ steps.quests.outputs.author }}"
-          echo "PR: #${{ steps.quests.outputs.pr_number }}"
-
-          # In the future, this step will:
-          # 1. Update the quest data file with completion status
-          # 2. Calculate and award points
-          # 3. Post a celebration comment on the PR
-          # 4. Trigger a rebuild of the leaderboard
-
-          echo "TODO: Automated scoring coming soon. For now, update quests.ts manually."
 
       - name: Post celebration comment
         if: steps.quests.outputs.quest_ids != ''
@@ -58,11 +43,11 @@ jobs:
             const author = '${{ steps.quests.outputs.author }}';
 
             const body = [
-              '## 🏆 Quest Complete!',
+              '## Quest Complete!',
               '',
               `**@${author}** just completed: ${questIds.map(id => '`' + id.toUpperCase() + '`').join(', ')}`,
               '',
-              'Points will be awarded on the [Quarter Cup leaderboard](https://quarter-cup.pages.dev).',
+              'Points will be awarded on the next sync cycle.',
               '',
               '> *"The quest board grows lighter..."*',
             ].join('\n');

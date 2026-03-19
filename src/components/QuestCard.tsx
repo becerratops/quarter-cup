@@ -6,6 +6,7 @@ const EFFORT_DISPLAY: Record<string, { stars: string; label: string }> = {
   S: { stars: '**', label: '1-3 hours' },
   M: { stars: '***', label: '3-8 hours' },
   L: { stars: '****', label: '1-2 days' },
+  XL: { stars: '*****', label: '3-5 days' },
 };
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -17,7 +18,7 @@ const PRIORITY_LABELS: Record<string, string> = {
 
 export function QuestCard({ quest, index }: { quest: Quest; index: number }) {
   const [expanded, setExpanded] = useState(false);
-  const effort = EFFORT_DISPLAY[quest.effort];
+  const effort = EFFORT_DISPLAY[quest.effort] || EFFORT_DISPLAY.M;
 
   return (
     <div
@@ -41,8 +42,28 @@ export function QuestCard({ quest, index }: { quest: Quest; index: number }) {
             fontFamily: 'var(--font-pixel)',
             fontSize: 8,
             color: 'var(--text-secondary)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
           }}>
             {quest.id}
+            {quest.jiraUrl && (
+              <a
+                href={quest.jiraUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                style={{
+                  color: 'var(--neon-blue)',
+                  textDecoration: 'none',
+                  opacity: 0.7,
+                  fontSize: 10,
+                }}
+                title="Open in Jira"
+              >
+                {'[>]'}
+              </a>
+            )}
           </span>
           <span className={`priority-badge ${quest.priority}`}>
             {PRIORITY_LABELS[quest.priority]}
@@ -142,30 +163,34 @@ export function QuestCard({ quest, index }: { quest: Quest; index: number }) {
           paddingTop: 16,
           borderTop: '1px solid #333',
         }}>
-          <div style={{
-            fontFamily: 'var(--font-pixel)',
-            fontSize: 8,
-            color: 'var(--neon-green)',
-            textTransform: 'uppercase',
-            letterSpacing: 1,
-            marginBottom: 8,
-          }}>
-            Acceptance Criteria
-          </div>
-          <ul style={{
-            fontFamily: 'var(--font-terminal)',
-            fontSize: 16,
-            color: 'var(--text-primary)',
-            paddingLeft: 20,
-            lineHeight: 1.6,
-          }}>
-            {quest.acceptanceCriteria.map((criteria, i) => (
-              <li key={i} style={{ marginBottom: 4 }}>
-                <span style={{ color: 'var(--neon-green)', marginRight: 8 }}>{'>'}</span>
-                {criteria}
-              </li>
-            ))}
-          </ul>
+          {quest.acceptanceCriteria.length > 0 && (
+            <>
+              <div style={{
+                fontFamily: 'var(--font-pixel)',
+                fontSize: 8,
+                color: 'var(--neon-green)',
+                textTransform: 'uppercase',
+                letterSpacing: 1,
+                marginBottom: 8,
+              }}>
+                Acceptance Criteria
+              </div>
+              <ul style={{
+                fontFamily: 'var(--font-terminal)',
+                fontSize: 16,
+                color: 'var(--text-primary)',
+                paddingLeft: 20,
+                lineHeight: 1.6,
+              }}>
+                {quest.acceptanceCriteria.map((criteria, i) => (
+                  <li key={i} style={{ marginBottom: 4 }}>
+                    <span style={{ color: 'var(--neon-green)', marginRight: 8 }}>{'>'}</span>
+                    {criteria}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
 
           {/* How to claim */}
           {quest.status === 'open' && (
@@ -178,8 +203,27 @@ export function QuestCard({ quest, index }: { quest: Quest; index: number }) {
               fontSize: 14,
               color: 'var(--text-secondary)',
             }}>
-              To claim this quest, reference <span style={{ color: 'var(--neon-gold)' }}>{quest.id}</span> in
-              your PR title or branch name (e.g., <span style={{ color: 'var(--neon-blue)' }}>fix/{quest.id.toLowerCase()}-{quest.title.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 30)}</span>)
+              {quest.jiraUrl ? (
+                <>
+                  Claim this quest by assigning yourself in{' '}
+                  <a
+                    href={quest.jiraUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    style={{ color: 'var(--neon-blue)' }}
+                  >
+                    Jira
+                  </a>
+                  {' '}and referencing <span style={{ color: 'var(--neon-gold)' }}>{quest.id}</span> in
+                  your PR title or branch name
+                </>
+              ) : (
+                <>
+                  To claim this quest, reference <span style={{ color: 'var(--neon-gold)' }}>{quest.id}</span> in
+                  your PR title or branch name (e.g., <span style={{ color: 'var(--neon-blue)' }}>fix/{quest.id.toLowerCase()}-{quest.title.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 30)}</span>)
+                </>
+              )}
             </div>
           )}
         </div>
@@ -194,13 +238,13 @@ function StatusBadge({
   completedBy,
 }: {
   status: string;
-  claimedBy?: string;
-  completedBy?: string;
+  claimedBy?: string | null;
+  completedBy?: string | null;
 }) {
   const config = {
     open: { label: 'OPEN', color: 'var(--text-secondary)', bg: 'transparent' },
-    claimed: { label: `CLAIMED · @${claimedBy}`, color: 'var(--neon-orange)', bg: 'rgba(255,140,0,0.1)' },
-    completed: { label: `DONE · @${completedBy}`, color: 'var(--neon-green)', bg: 'rgba(57,255,20,0.1)' },
+    claimed: { label: `CLAIMED${claimedBy ? ` · @${claimedBy}` : ''}`, color: 'var(--neon-orange)', bg: 'rgba(255,140,0,0.1)' },
+    completed: { label: `DONE${completedBy ? ` · @${completedBy}` : ''}`, color: 'var(--neon-green)', bg: 'rgba(57,255,20,0.1)' },
   }[status] || { label: status, color: '#666', bg: 'transparent' };
 
   return (

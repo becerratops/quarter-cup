@@ -1,0 +1,32 @@
+name: Jira Sync
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Every 15 minutes
+  workflow_dispatch: {}      # Manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - name: Sync quests from Jira
+        run: npx tsx scripts/sync.ts
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "Quarter Cup Bot"
+          git config user.email "bot@quartercup.dev"
+          git add src/data/generated/
+          git diff --staged --quiet || (git commit -m "Sync quests from Jira" && git push)

@@ -1,10 +1,12 @@
-import { CURRENT_SEASON } from '../data/players';
+import { useState } from 'react';
+import { CURRENT_SEASON, SYNCED_AT } from '../data/players';
 import { TOTAL_POINTS, QUEST_COUNT, URGENT_COUNT } from '../data/quests';
 import { Trophy } from './Trophy';
 
 export function Header() {
+  const [now] = useState(() => Date.now());
   const daysLeft = Math.max(0, Math.ceil(
-    (new Date(CURRENT_SEASON.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    (new Date(CURRENT_SEASON.endDate).getTime() - now) / (1000 * 60 * 60 * 24)
   ));
 
   return (
@@ -51,6 +53,17 @@ export function Header() {
         <StatBlock label="Urgent" value={String(URGENT_COUNT)} color="var(--neon-red)" />
         <StatBlock label="Days Left" value={String(daysLeft)} color={daysLeft <= 3 ? 'var(--neon-red)' : 'var(--neon-green)'} />
       </div>
+
+      {SYNCED_AT && (
+        <div style={{
+          marginTop: 16,
+          fontFamily: 'var(--font-terminal)',
+          fontSize: 12,
+          color: '#444',
+        }}>
+          Last synced: {formatSyncTime(SYNCED_AT)}
+        </div>
+      )}
     </header>
   );
 }
@@ -79,4 +92,19 @@ function StatBlock({ label, value, color }: { label: string; value: string; colo
       </div>
     </div>
   );
+}
+
+function formatSyncTime(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }

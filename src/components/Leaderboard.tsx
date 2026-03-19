@@ -3,11 +3,35 @@ import type { Player } from '../data/players';
 import { QUESTS } from '../data/quests';
 import { PixelAvatar } from './PixelAvatar';
 
+const ROLE_COLORS: Record<string, string> = {
+  'Head of Product': 'var(--neon-purple)',
+  'Head of Engineering': 'var(--neon-blue)',
+  'Product Engineer': 'var(--neon-green)',
+  'COO': 'var(--neon-orange)',
+  'CEO': 'var(--neon-gold)',
+  'Manager of Sales': 'var(--neon-orange)',
+  'Head of Partnerships': 'var(--neon-blue)',
+};
+
 function getPlayerStats(player: Player) {
   const completed = QUESTS.filter(q => q.completedBy === player.githubUsername);
   const claimed = QUESTS.filter(q => q.claimedBy === player.githubUsername && q.status === 'claimed');
-  const points = completed.reduce((sum, q) => sum + q.points, 0) + player.totalPoints;
-  return { completed: completed.length, claimed: claimed.length, points };
+  const discovered = player.questsDiscovered?.length || 0;
+
+  // Use pre-calculated points from sync, fall back to quest-based calculation
+  const points = player.totalPoints > 0
+    ? player.totalPoints
+    : completed.reduce((sum, q) => sum + q.points, 0);
+
+  return {
+    completed: completed.length,
+    claimed: claimed.length,
+    discovered,
+    points,
+    discoveryPoints: player.discoveryPoints || 0,
+    completionPoints: player.completionPoints || 0,
+    reviewPoints: player.reviewPoints || 0,
+  };
 }
 
 export function Leaderboard() {
@@ -59,7 +83,7 @@ export function Leaderboard() {
             color: 'var(--neon-gold)',
             opacity: 0.6,
           }}>
-            Merge a PR referencing a quest ID to score!
+            File a Jira ticket to discover quests, merge PRs to complete them!
           </div>
         </div>
       )}
@@ -75,12 +99,21 @@ function LeaderboardRow({
 }: {
   player: Player;
   rank: number;
-  stats: { completed: number; claimed: number; points: number };
+  stats: {
+    completed: number;
+    claimed: number;
+    discovered: number;
+    points: number;
+    discoveryPoints: number;
+    completionPoints: number;
+    reviewPoints: number;
+  };
   maxPoints: number;
 }) {
   const rankColors = ['var(--neon-gold)', '#c0c0c0', '#cd7f32'];
   const rankColor = rank <= 3 ? rankColors[rank - 1] : 'var(--text-secondary)';
   const barWidth = maxPoints > 0 ? (stats.points / maxPoints) * 100 : 0;
+  const roleColor = ROLE_COLORS[player.role] || 'var(--text-secondary)';
 
   return (
     <div
@@ -111,7 +144,7 @@ function LeaderboardRow({
 
       {/* Info */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
           <span style={{
             fontFamily: 'var(--font-pixel)',
             fontSize: 11,
@@ -125,6 +158,16 @@ function LeaderboardRow({
             color: 'var(--text-secondary)',
           }}>
             @{player.githubUsername}
+          </span>
+          <span style={{
+            fontFamily: 'var(--font-pixel)',
+            fontSize: 7,
+            color: roleColor,
+            padding: '1px 6px',
+            border: `1px solid ${roleColor}`,
+            opacity: 0.8,
+          }}>
+            {player.role}
           </span>
         </div>
 
@@ -145,16 +188,37 @@ function LeaderboardRow({
           }} />
         </div>
 
+        {/* Point breakdown */}
         <div style={{
           display: 'flex',
-          gap: 16,
+          gap: 12,
           marginTop: 4,
           fontFamily: 'var(--font-terminal)',
           fontSize: 14,
           color: 'var(--text-secondary)',
+          flexWrap: 'wrap',
         }}>
-          <span>{stats.completed} completed</span>
-          <span>{stats.claimed} in progress</span>
+          {stats.discoveryPoints > 0 && (
+            <span title="Points from filing Jira tickets">
+              <span style={{ color: 'var(--neon-purple)' }}>{stats.discoveryPoints}</span> discovered
+            </span>
+          )}
+          {stats.completionPoints > 0 && (
+            <span title="Points from completing quests">
+              <span style={{ color: 'var(--neon-green)' }}>{stats.completionPoints}</span> completed
+            </span>
+          )}
+          {stats.reviewPoints > 0 && (
+            <span title="Points from reviewing PRs">
+              <span style={{ color: 'var(--neon-blue)' }}>{stats.reviewPoints}</span> reviewed
+            </span>
+          )}
+          {stats.points === 0 && (
+            <>
+              <span>{stats.completed} completed</span>
+              <span>{stats.claimed} in progress</span>
+            </>
+          )}
         </div>
       </div>
 
